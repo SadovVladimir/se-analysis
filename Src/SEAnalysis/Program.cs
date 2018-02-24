@@ -8,6 +8,8 @@
     using System.Threading.Tasks;
     using System.Threading;
 
+    using NLog;
+
     using Data;
 
     /// <summary>
@@ -61,7 +63,9 @@
     class Program
     {
         // Размер в GB
-        const long MAX_BYTES_PER_BATCH = checked(1 * 1024L * 1024 * 1024);
+        private const long MAX_BYTES_PER_BATCH = checked(1 * 1024L * 1024 * 1024);
+
+        private static Logger Log = LogManager.GetLogger("Main");
 
         private static readonly string[] _acceptedNames =
         {
@@ -194,7 +198,7 @@
         {
             if(args.Length != 1)
             {
-                Console.WriteLine("\n\tMust be a single argument.");
+                Log.Info("\n\tMust be a single argument.\n\tPath to directories which contains data.");
                 return 1;
             }
 
@@ -203,7 +207,7 @@
    
             if(!Directory.Exists(pathToDir))
             {
-                Console.WriteLine($"\n\t{pathToDir} does not exist.");
+                Log.Info($"\n\t{pathToDir} does not exist.");
                 return 1;
             }
 
@@ -212,24 +216,24 @@
                 Directory.CreateDirectory(Path.Combine(pathToDir, "Stat"));
             }
 
-            Console.WriteLine($"Start processing batch...");
+            Log.Info($"Start processing batch...");
 
             foreach (DataBatch batch in CreateBatches(pathToDir))
             { 
                 if(batch.TotalBytesBatchSize > MAX_BYTES_PER_BATCH)
                 {
-                    Console.WriteLine("Skipped:");
+                    Log.Info("Skipped:");
 
                     foreach (var item in batch.Dirs)
                     {
-                        Console.WriteLine($"\t{item.DirectoryName}");
+                        Log.Info($"\t{item.DirectoryName}");
                     }
                 }
                 else
                 {
-                    Console.WriteLine("\nA new batch.");
-                    Console.WriteLine($"\tCount of directories {batch.Dirs.Count}.");
-                    Console.WriteLine($"\tSize in MB {batch.TotalBytesBatchSize / (1024 * 1024F)}.");
+                    Log.Info("\nA new batch.");
+                    Log.Info($"\tCount of directories {batch.Dirs.Count}.");
+                    Log.Info($"\tSize in MB {batch.TotalBytesBatchSize / (1024 * 1024F)}.");
 
                     var dataPerTask = SplitBatch(batch);
 
@@ -246,19 +250,19 @@
                         {
                             FilesWithData files = dataPerTask[j][k];
 
-                            Console.WriteLine($"Filling tables from {files.DirectoryName}");
+                            Log.Info($"Filling tables from {files.DirectoryName}");
 
                             DataSet set = SETables.CreateDataSet(files.DirectoryName);
 
-                            Console.WriteLine("Filling:");
+                            Log.Info("Filling:");
 
                             foreach (string path in files.FilesFullPaths)
                             {
                                 string tableName = Path.GetFileNameWithoutExtension(path);
-                                Console.WriteLine($"\t{tableName}");
+                                Log.Info($"\t{tableName}");
                                 Filler filler = Filler.GetFillerByTableName(tableName);
                                 DataTable table = set.Tables[tableName];
-                                filler.FillFromXml(path, table);
+                                //filler.FillFromXml(path, table);
                             }
 
                             dataSetsPerTask[j].Add(set);
@@ -266,8 +270,6 @@
                     }
                 }
             }
-
-            Console.ReadKey();
 
             return 0;
         }   
