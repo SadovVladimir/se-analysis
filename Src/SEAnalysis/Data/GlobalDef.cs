@@ -2,7 +2,7 @@
 {
     using System.Collections.Generic;
 
-    static class GlobalDef
+    internal static class GlobalDef
     {
         public static readonly Dictionary<string, string> AttrToColumnNameDict = new Dictionary<string, string>()
         {
@@ -39,10 +39,9 @@
         };
     }
 
-    enum PostLinkType : byte
+    internal enum PostLinkType : byte
     { Linked, Duplicate };
 
-    enum PostType : byte
+    internal enum PostType : byte
     { Question, Answer };
-
 }

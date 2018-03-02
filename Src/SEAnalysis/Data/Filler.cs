@@ -3,13 +3,11 @@
     using System;
     using System.Collections.Generic;
     using System.Data;
-    using System.Linq;
     using System.Xml;
-    using System.IO;
 
     using NLog;
 
-    class Filler
+    internal class Filler
     {
         protected Logger Log { get; private set; }
 
@@ -21,7 +19,7 @@
             {
                 using (IEnumerator<string> nameEnum = AttrNames.GetEnumerator(), valueEnum = Values.GetEnumerator())
                 {
-                    while(nameEnum.MoveNext() & valueEnum.MoveNext())
+                    while (nameEnum.MoveNext() & valueEnum.MoveNext())
                     {
                         string name = nameEnum.Current;
                         string value = valueEnum.Current;
@@ -103,7 +101,7 @@
                         {
                             if (reader.HasAttributes)
                             {
-                                while(reader.MoveToNextAttribute())
+                                while (reader.MoveToNextAttribute())
                                 {
                                     attrNames.Add(reader.Name);
                                     values.Add(reader.Value);

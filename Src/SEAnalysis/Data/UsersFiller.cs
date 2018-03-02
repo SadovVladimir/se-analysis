@@ -2,7 +2,7 @@
 {
     using System;
 
-    class UsersFiller : Filler
+    internal class UsersFiller : Filler
     {
         protected override object ProcessAttr(string Name, string Value)
         {

@@ -1,11 +1,10 @@
 ﻿namespace SEA.Data
 {
-    using AngleSharp;
     using AngleSharp.Dom.Html;
     using AngleSharp.Extensions;
     using AngleSharp.Parser.Html;
 
-    class Html2Text
+    internal class Html2Text
     {
         private HtmlParser _parser;
 

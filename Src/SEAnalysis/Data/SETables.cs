@@ -1,15 +1,9 @@
 ﻿namespace SEA.Data
 {
     using System;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Text;
-    using System.Threading.Tasks;
     using System.Data;
-    using System.IO;
 
-
-    static class SETables
+    internal static class SETables
     {
         private static DataTable CreateCommentsTable(string Name)
         {
@@ -25,21 +19,6 @@
             comments.PrimaryKey = new DataColumn[] { idColumn };
 
             return comments;
-        }
-
-        public static DataSet CreateDataSet(string Name)
-        {
-            DataSet dataSet = new DataSet(Name);
-
-            DataTable users = CreateUsersTable("Users");
-            DataTable tags = CreateTagsTable("Tags");
-            DataTable comments = CreateCommentsTable("Comments");
-            DataTable posts = CreatePostsTable("Posts");
-            //DataTable postLinks = CreatePostLinksTable("PostLinks");
-
-            dataSet.Tables.AddRange(new DataTable[] { users, tags, comments, posts });
-
-            return dataSet;
         }
 
         private static DataTable CreatePostLinksTable(string Name)
@@ -148,6 +127,21 @@
             Set.Relations.Add(users.Columns["id"], posts.Columns["owner_user_id"]);
             Set.Relations.Add(posts.Columns["id"], comments.Columns["post_id"]);
             Set.Relations.Add(posts.Columns["id"], postLinks.Columns["post_id"]);
+        }
+
+        public static DataSet CreateDataSet(string Name)
+        {
+            DataSet dataSet = new DataSet(Name);
+
+            DataTable users = CreateUsersTable("Users");
+            DataTable tags = CreateTagsTable("Tags");
+            DataTable comments = CreateCommentsTable("Comments");
+            DataTable posts = CreatePostsTable("Posts");
+            //DataTable postLinks = CreatePostLinksTable("PostLinks");
+
+            dataSet.Tables.AddRange(new DataTable[] { users, tags, comments, posts });
+
+            return dataSet;
         }
     }
 }
