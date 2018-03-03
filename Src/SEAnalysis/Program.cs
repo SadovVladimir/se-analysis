@@ -78,7 +78,7 @@
     internal class Program
     {
         // Размер в GB
-        private const long MAX_BYTES_PER_BATCH = checked(300 * 1024L * 1024);
+        private const long MAX_BYTES_PER_BATCH = checked(100 * 1024L * 1024);
 
         private static readonly string[] _acceptedNames =
         {
@@ -264,7 +264,7 @@
         }
 
         /// <summary>
-        /// Разделение 
+        /// Разделение. 
         /// </summary>
         /// <param name="Batch"></param>
         /// <returns></returns>

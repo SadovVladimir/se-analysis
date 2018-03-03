@@ -8,20 +8,25 @@
     using System.Text;
 
     using CsvHelper;
+    using CsvHelper.Configuration;
+    using CsvHelper.TypeConversion;
 
     internal static class Stat
     {
-        private static IEnumerable<short?> GetAges(DataSet DataSet)
+        private static IEnumerable<object> GetAges(DataSet DataSet)
         {
             DataTable ageTable = DataSet.Tables["Users"];
 
             var ages = from row in ageTable.AsEnumerable()
-                       select row.Field<short?>(GlobalDef.AttrToColumnNameDict["Age"]);
+                       let age = row.Field<short?>(GlobalDef.AttrToColumnNameDict["Age"])
+                       let ageStr = age.HasValue ? age.Value.ToString() : "None"
+                       group ageStr by ageStr into ageGroup
+                       select new { Age = ageGroup.Key, Count = ageGroup.Count() };
 
             return ages;
         }
 
-        private static IEnumerable<(int Year, int Month, int Count)> GetCountCrDateQuestionPostsByYearsAndMonths(DataSet DataSet)
+        private static IEnumerable<object> GetCountCrDateQuestionPostsByYearsAndMonths(DataSet DataSet)
         {
             DataTable postsTable = DataSet.Tables["Posts"];
 
@@ -32,13 +37,12 @@
                                                     group groupByYear by groupByYear.Month)
                               group groupByMonth by groupByYears.Key into allGroups
                               from rec in allGroups
-                              // Год, месяц, количество регистраций.
-                              select (allGroups.Key, rec.Key, rec.Count());
+                              select new { Year = allGroups.Key, Month = rec.Key, Count = rec.Count() };
 
             return crQuestions;
         }
 
-        private static IEnumerable<(int Year, int Month, int Count)> GetCountUsersRegByYearsAndMonths(DataSet DataSet)
+        private static IEnumerable<object> GetCountUsersRegByYearsAndMonths(DataSet DataSet)
         {
             DataTable usersTable = DataSet.Tables["Users"];
 
@@ -48,36 +52,68 @@
                                                  group groupByYear by groupByYear.Month)
                            group groupByMonth by groupByYears.Key into allGroups
                            from rec in allGroups
-                           // Год, месяц, количество регистраций.
-                           select (allGroups.Key, rec.Key, rec.Count());
+                           select new { Year = allGroups.Key, Month = rec.Key, Count = rec.Count() };
 
             return regUsers;
         }
 
-        private static IEnumerable<(string, uint)> GetNPopTags(DataSet DataSet, int N)
+        private static IEnumerable<object> GetNPopTags(DataSet DataSet, int N)
         {
             DataTable tagsTable = DataSet.Tables["Tags"];
 
-            var popTags = from row in tagsTable.AsEnumerable()
-                          orderby row.Field<uint>(GlobalDef.AttrToColumnNameDict["Count"]) descending
-                          group row.Field<string>(GlobalDef.AttrToColumnNameDict["TagName"]) by row.Field<uint>(GlobalDef.AttrToColumnNameDict["Count"]) into countTagsGroup
-                          from tag in countTagsGroup
-                          select (tag, countTagsGroup.Key);
+            var popTags = tagsTable.AsEnumerable()
+                .GroupBy(row => row.Field<uint>(GlobalDef.AttrToColumnNameDict["Count"]))
+                .OrderByDescending(group => group.Key)
+                .Take(N)
+                .SelectMany(group => group.Select(row => new { Tag = row.Field<string>(GlobalDef.AttrToColumnNameDict["TagName"]), Count = group.Key }));
 
-            return popTags.Take(N);
+            return popTags;
         }
 
-        private static IEnumerable<(string, uint)> GetNUnpopTags(DataSet DataSet, int N)
+        private static IEnumerable<object> GetNUnpopTags(DataSet DataSet, int N)
         {
-            DataTable unpopTags = DataSet.Tables["Tags"];
+            DataTable tagsTable = DataSet.Tables["Tags"];
 
-            var query = from row in unpopTags.AsEnumerable()
-                        orderby row.Field<uint>(GlobalDef.AttrToColumnNameDict["Count"]) ascending
-                        group row.Field<string>(GlobalDef.AttrToColumnNameDict["TagName"]) by row.Field<uint>(GlobalDef.AttrToColumnNameDict["Count"]) into countTagsGroup
-                        from tag in countTagsGroup
-                        select (tag, countTagsGroup.Key);
+            var unpopTags = tagsTable.AsEnumerable()
+                .GroupBy(row => row.Field<uint>(GlobalDef.AttrToColumnNameDict["Count"]))
+                .OrderBy(group => group.Key)
+                .Take(N)
+                .SelectMany(group => group.Select(row => new { Tag = row.Field<string>(GlobalDef.AttrToColumnNameDict["TagName"]), Count = group.Key }));
 
-            return query.Take(N);
+            return unpopTags;
+        }
+
+        private static IEnumerable<object> GetNUsersHaveHighestRep(DataSet DataSet, int N)
+        {
+            Html2Text htmlConv = new Html2Text();
+
+            DataTable usersTable = DataSet.Tables["Users"];
+
+            var users = usersTable.AsEnumerable()
+                        .GroupBy(row => row.Field<int>(GlobalDef.AttrToColumnNameDict["Reputation"]))
+                        .OrderByDescending(group => group.Key)
+                        .Take(N)
+                        .SelectMany(group => group.Select(row =>
+                            new
+                            {
+                                Reputation = group.Key,
+                                Name = row.Field<string>(GlobalDef.AttrToColumnNameDict["DisplayName"]),
+                                Location = row.Field<string>(GlobalDef.AttrToColumnNameDict["Location"]),
+                                AboutMe = htmlConv.ToText(row.Field<string>(GlobalDef.AttrToColumnNameDict["AboutMe"])),
+                                Age = row.Field<short?>(GlobalDef.AttrToColumnNameDict["Age"])
+                            })
+                        );
+
+            return users;
+        }
+
+        private static void SaveToCSV(string PathToSave, IEnumerable<object> Collection)
+        {
+            using (CsvWriter writer = new CsvWriter(new StreamWriter(PathToSave, false, Encoding.UTF8)))
+            {
+                writer.Configuration.TypeConverterCache.AddConverter(typeof(object), new NullValueConverter<object>());
+                writer.WriteRecords(Collection);
+            }
         }
 
         public static void CollectStat(object Param)
@@ -93,32 +129,45 @@
                     Directory.CreateDirectory(saveDir);
                 }
 
-                GetNPopTags(dataSet, 10);
-                GetNUnpopTags(dataSet, 10);
-
                 var ages = GetAges(dataSet);
 
-                GetCountCrDateQuestionPostsByYearsAndMonths(dataSet);
+                SaveToCSV(Path.Combine(saveDir, "Ages.csv"), ages);
 
-                GetCountUsersRegByYearsAndMonths(dataSet);
+                var popTags = GetNPopTags(dataSet, 20);
 
-                using (CsvWriter writer = new CsvWriter(new StreamWriter(Path.Combine(saveDir, "Ages.csv"), false, Encoding.UTF8)))
-                {
-                    foreach (short? age in ages)
-                    {
-                        if (age.HasValue)
-                        {
-                            writer.WriteField(age.Value);
-                        }
-                        else
-                        {
-                            writer.WriteField("None");
-                        }
+                SaveToCSV(Path.Combine(saveDir, "PopTags.csv"), popTags);
 
-                        writer.NextRecord();
-                    }
-                }
+                var unpopTags = GetNUnpopTags(dataSet, 20);
+
+                SaveToCSV(Path.Combine(saveDir, "UnpopTags.csv"), unpopTags);
+
+                var users = GetNUsersHaveHighestRep(dataSet, 20);
+
+                SaveToCSV(Path.Combine(saveDir, "UsersHighestRep.csv"), users);
+
+                var usersReg = GetCountUsersRegByYearsAndMonths(dataSet);
+
+                SaveToCSV(Path.Combine(saveDir, "UsersReg.csv"), usersReg);
+
+                var posts = GetCountCrDateQuestionPostsByYearsAndMonths(dataSet);
+
+                SaveToCSV(Path.Combine(saveDir, "PostsCrDate.csv"), posts);
             }
+        }
+    }
+
+    internal class NullValueConverter<T> : DefaultTypeConverter
+    {
+        public override string ConvertToString(object value, IWriterRow row, MemberMapData memberMapData)
+        {
+            if (value == null)
+            {
+                return "None";
+            }
+
+            var converter = row.Configuration.TypeConverterCache.GetConverter<T>();
+
+            return converter.ConvertToString(value, row, memberMapData);
         }
     }
 }
