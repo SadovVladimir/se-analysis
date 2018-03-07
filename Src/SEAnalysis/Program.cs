@@ -78,7 +78,7 @@
     internal class Program
     {
         // Размер в GB
-        private const long MAX_BYTES_PER_BATCH = checked(100 * 1024L * 1024);
+        private const long MAX_BYTES_PER_BATCH = checked(200 * 1024L * 1024);
 
         private static readonly string[] _acceptedNames =
         {
@@ -256,7 +256,7 @@
                         tasks[i].Start();
                     }
 
-                    Task.WaitAny(tasks);
+                    Task.WaitAll(tasks);
                 }
             }
 

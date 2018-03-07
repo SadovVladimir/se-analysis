@@ -11,6 +11,10 @@
     using CsvHelper.Configuration;
     using CsvHelper.TypeConversion;
 
+    using AngleSharp.Dom.Html;
+    using AngleSharp.Extensions;
+    using AngleSharp.Parser.Html;
+
     internal static class Stat
     {
         private static IEnumerable<object> GetAges(DataSet DataSet)
@@ -85,7 +89,7 @@
 
         private static IEnumerable<object> GetNUsersHaveHighestRep(DataSet DataSet, int N)
         {
-            Html2Text htmlConv = new Html2Text();
+            HtmlDocGen gen = new HtmlDocGen();
 
             DataTable usersTable = DataSet.Tables["Users"];
 
@@ -94,24 +98,69 @@
                         .OrderByDescending(group => group.Key)
                         .Take(N)
                         .SelectMany(group => group.Select(row =>
-                            new
+                        { 
+                            short ? age = row.Field<short?>(GlobalDef.AttrToColumnNameDict["Age"]);
+                            return new
                             {
                                 Reputation = group.Key,
                                 Name = row.Field<string>(GlobalDef.AttrToColumnNameDict["DisplayName"]),
                                 Location = row.Field<string>(GlobalDef.AttrToColumnNameDict["Location"]),
-                                AboutMe = htmlConv.ToText(row.Field<string>(GlobalDef.AttrToColumnNameDict["AboutMe"])),
-                                Age = row.Field<short?>(GlobalDef.AttrToColumnNameDict["Age"])
-                            })
+                                AboutMe = gen.GetFullHtmlDocAsString(row.Field<string>(GlobalDef.AttrToColumnNameDict["AboutMe"])),
+                                Age = age.HasValue ? age.Value.ToString() : "None"
+                            };
+                        })
                         );
 
             return users;
+        }
+
+
+        private static IEnumerable<object> GetNMostViewsQuestion(DataSet DataSet, int N)
+        {
+            DataTable postsTable = DataSet.Tables["Posts"];
+
+            HtmlDocGen gen = new HtmlDocGen();
+
+            var mostViewsQuestions = from row in postsTable.AsEnumerable()
+                                     where row.Field<PostType>(GlobalDef.AttrToColumnNameDict["PostTypeId"]) == PostType.Question
+                                     orderby row.Field<uint>(GlobalDef.AttrToColumnNameDict["ViewCount"]) descending
+                                     select new
+                                     {
+                                         ViewCount = row.Field<uint>(GlobalDef.AttrToColumnNameDict["ViewCount"]),
+                                         Score = row.Field<int>(GlobalDef.AttrToColumnNameDict["Score"]),
+                                         Title = row.Field<string>(GlobalDef.AttrToColumnNameDict["Title"]),
+                                         Body = gen.GetFullHtmlDocAsString(row.Field<string>(GlobalDef.AttrToColumnNameDict["Body"])),
+                                         Tags = row.Field<string>(GlobalDef.AttrToColumnNameDict["Tags"])
+                                     };
+
+            return mostViewsQuestions.Take(N);
+        }
+
+        private static IEnumerable<object> GetNQuestionsByScore(DataSet DataSet, int N)
+        {
+            DataTable postsTable = DataSet.Tables["Posts"];
+
+            HtmlDocGen gen = new HtmlDocGen();
+
+            var mostViewsQuestions = from row in postsTable.AsEnumerable()
+                                     where row.Field<PostType>(GlobalDef.AttrToColumnNameDict["PostTypeId"]) == PostType.Question
+                                     orderby row.Field<int>(GlobalDef.AttrToColumnNameDict["Score"]) descending
+                                     select new
+                                     {
+                                         ViewCount = row.Field<uint>(GlobalDef.AttrToColumnNameDict["ViewCount"]),
+                                         Score = row.Field<int>(GlobalDef.AttrToColumnNameDict["Score"]),
+                                         Title = row.Field<string>(GlobalDef.AttrToColumnNameDict["Title"]),
+                                         Body = gen.GetFullHtmlDocAsString(row.Field<string>(GlobalDef.AttrToColumnNameDict["Body"])),
+                                         Tags = row.Field<string>(GlobalDef.AttrToColumnNameDict["Tags"])
+                                     };
+
+            return mostViewsQuestions.Take(N);
         }
 
         private static void SaveToCSV(string PathToSave, IEnumerable<object> Collection)
         {
             using (CsvWriter writer = new CsvWriter(new StreamWriter(PathToSave, false, Encoding.UTF8)))
             {
-                writer.Configuration.TypeConverterCache.AddConverter(typeof(object), new NullValueConverter<object>());
                 writer.WriteRecords(Collection);
             }
         }
@@ -129,45 +178,33 @@
                     Directory.CreateDirectory(saveDir);
                 }
 
-                var ages = GetAges(dataSet);
+                var ages = GetAges(dataSet).ToArray();
+
+                var popTags = GetNPopTags(dataSet, 20).ToArray();
+
+                var unpopTags = GetNUnpopTags(dataSet, 20).ToArray();
+
+                var users = GetNUsersHaveHighestRep(dataSet, 20).ToArray();
+
+                var usersReg = GetCountUsersRegByYearsAndMonths(dataSet).ToArray();
+
+                var posts = GetCountCrDateQuestionPostsByYearsAndMonths(dataSet).ToArray();
+
+                var mostViewQuestions = GetNMostViewsQuestion(dataSet, 30);
+
+                var questionsHighestScore = GetNQuestionsByScore(dataSet, 30);
 
                 SaveToCSV(Path.Combine(saveDir, "Ages.csv"), ages);
-
-                var popTags = GetNPopTags(dataSet, 20);
-
                 SaveToCSV(Path.Combine(saveDir, "PopTags.csv"), popTags);
-
-                var unpopTags = GetNUnpopTags(dataSet, 20);
-
                 SaveToCSV(Path.Combine(saveDir, "UnpopTags.csv"), unpopTags);
-
-                var users = GetNUsersHaveHighestRep(dataSet, 20);
-
                 SaveToCSV(Path.Combine(saveDir, "UsersHighestRep.csv"), users);
-
-                var usersReg = GetCountUsersRegByYearsAndMonths(dataSet);
-
                 SaveToCSV(Path.Combine(saveDir, "UsersReg.csv"), usersReg);
-
-                var posts = GetCountCrDateQuestionPostsByYearsAndMonths(dataSet);
-
                 SaveToCSV(Path.Combine(saveDir, "PostsCrDate.csv"), posts);
+                SaveToCSV(Path.Combine(saveDir, "MostViewQuestions.csv"), mostViewQuestions);
+                SaveToCSV(Path.Combine(saveDir, "QuestionsHighestScore.csv"), questionsHighestScore);
             }
         }
     }
 
-    internal class NullValueConverter<T> : DefaultTypeConverter
-    {
-        public override string ConvertToString(object value, IWriterRow row, MemberMapData memberMapData)
-        {
-            if (value == null)
-            {
-                return "None";
-            }
-
-            var converter = row.Configuration.TypeConverterCache.GetConverter<T>();
-
-            return converter.ConvertToString(value, row, memberMapData);
-        }
-    }
+   
 }

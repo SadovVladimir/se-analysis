@@ -74,6 +74,7 @@
     <Compile Include="Data\Filler.cs" />
     <Compile Include="Data\GlobalDef.cs" />
     <Compile Include="Data\Html2Text.cs" />
+    <Compile Include="Data\HtmlDocGen.cs" />
     <Compile Include="Data\PostLinksFiller.cs" />
     <Compile Include="Data\PostsFiller.cs" />
     <Compile Include="Data\SETables.cs" />
