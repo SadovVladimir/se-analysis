@@ -2,8 +2,7 @@
 {
     using System;
 
-
-    class PostLinksFiller : Filler
+    internal class PostLinksFiller : Filler
     {
         protected override object ProcessAttr(string Name, string Value)
         {

@@ -4,7 +4,7 @@
     using System.Text;
     using System.Text.RegularExpressions;
 
-    class PostsFiller : Filler
+    internal class PostsFiller : Filler
     {
         private Html2Text _conv;
 
@@ -42,7 +42,7 @@
 
                 for (int i = 0; i < Value.Length; i++)
                 {
-                    if(Value[i] == '<')
+                    if (Value[i] == '<')
                     {
                         countLessChar++;
                     }
@@ -59,7 +59,7 @@
                     if (groupSize > 1)
                     {
                         tags.Append(allMatches[i].Groups[groupSize - 1].Value);
-                        tags.Append(";");       
+                        tags.Append(";");
                     }
                 }
 

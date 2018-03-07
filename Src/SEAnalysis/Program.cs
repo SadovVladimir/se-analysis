@@ -6,14 +6,58 @@
     using System.IO;
     using System.Linq;
     using System.Threading.Tasks;
-    using System.Threading;
 
     using Data;
 
+    using NLog;
+
     /// <summary>
-    /// Класс, который хранит пути к файлам для загрузки какого-то раздела Stack Exchange.
+    /// Класс, который хранит несколько <see cref="FilesWithData"/> для обработки в оперативной памяти. 
     /// </summary>
-    class FilesWithData
+    internal class DataBatch
+    {
+        private LinkedList<FilesWithData> _dirs;
+
+        private long _totalBytes;
+
+        public IReadOnlyCollection<FilesWithData> Dirs => _dirs;
+
+        public long TotalBytesBatchSize => _totalBytes;
+
+        public DataBatch()
+        {
+            _dirs = new LinkedList<FilesWithData>();
+            _totalBytes = 0L;
+        }
+
+        public void Add(FilesWithData File)
+        {
+            _dirs.AddLast(File);
+            _totalBytes = checked(_totalBytes + File.TotalBytesFilesSize);
+        }
+    }
+
+    internal class DataForTask
+    {
+        private List<FilesWithData> _filesGroups;
+
+        public IReadOnlyCollection<FilesWithData> FilesGroups => _filesGroups;
+
+        public DataForTask()
+        {
+            _filesGroups = new List<FilesWithData>();
+        }
+
+        public void Add(FilesWithData Data)
+        {
+            _filesGroups.Add(Data);
+        }
+    }
+
+    /// <summary>
+    /// Класс, который хранит пути к файлам для загрузки какого-то раздела Stack Exchange. 
+    /// </summary>
+    internal class FilesWithData
     {
         private long _totalSize;
 
@@ -31,37 +75,10 @@
         }
     }
 
-    /// <summary>
-    /// Класс, который хранит несколько <see cref="FilesWithData"/> для обработки в оперативной памяти.
-    /// </summary>
-    class DataBatch
-    {
-        private LinkedList<FilesWithData> _dirs;
-
-        private long _totalBytes;
-
-        public long TotalBytesBatchSize => _totalBytes;
-
-        public IReadOnlyCollection<FilesWithData> Dirs => _dirs;
-
-        public DataBatch()
-        {
-            _dirs = new LinkedList<FilesWithData>();
-            _totalBytes = 0L;
-        }
-
-        public void Add(FilesWithData File)
-        {
-            _dirs.AddLast(File);
-            _totalBytes = checked(_totalBytes + File.TotalBytesFilesSize);
-        }
-    }
-
-
-    class Program
+    internal class Program
     {
         // Размер в GB
-        const long MAX_BYTES_PER_BATCH = checked(1 * 1024L * 1024 * 1024);
+        private const long MAX_BYTES_PER_BATCH = checked(1 * 1024 * 1024L * 1024);
 
         private static readonly string[] _acceptedNames =
         {
@@ -70,6 +87,8 @@
             "Tags",
             "Comments"
         };
+
+        private static Logger Log = LogManager.GetLogger("Main");
 
         private static IEnumerable<DataBatch> CreateBatches(string PathToDir)
         {
@@ -116,7 +135,7 @@
                             }
                         }
 
-                        if(!isAdded)
+                        if (!isAdded)
                         {
                             DataBatch batch = new DataBatch();
                             batch.Add(files);
@@ -124,7 +143,6 @@
                             batches.Add(batch);
                         }
                     }
-
                 }
 
                 _paths.Clear();
@@ -133,17 +151,136 @@
             return batches;
         }
 
-        private static List<List<FilesWithData>> SplitBatch(DataBatch Batch)
+        private static List<List<DataSet>> GetDataSets(IReadOnlyList<DataForTask> DataSetsPerTask)
+        {
+            List<List<DataSet>> dataSetsPerTask = new List<List<DataSet>>(DataSetsPerTask.Count);
+
+            for (int i = 0; i < DataSetsPerTask.Count; i++)
+            {
+                dataSetsPerTask.Add(new List<DataSet>(DataSetsPerTask[i].FilesGroups.Count));
+            }
+
+            for (int j = 0; j < DataSetsPerTask.Count; j++)
+            {
+                foreach (FilesWithData files in DataSetsPerTask[j].FilesGroups)
+                {
+                    Log.Info($"Filling tables from {files.DirectoryName}");
+
+                    DataSet set = SETables.CreateDataSet(files.DirectoryName);
+
+                    Log.Info("Filling:");
+
+                    foreach (string path in files.FilesFullPaths)
+                    {
+                        string tableName = Path.GetFileNameWithoutExtension(path);
+                        Log.Info($"\t{tableName}");
+                        Filler filler = Filler.GetFillerByTableName(tableName);
+                        DataTable table = set.Tables[tableName];
+                        filler.FillFromXml(path, table);
+                    }
+
+                    dataSetsPerTask[j].Add(set);
+                }
+            }
+
+            return dataSetsPerTask;
+        }
+
+        private static Task[] GetTasks(IReadOnlyCollection<IEnumerable<DataSet>> DataSetsPerTask, string FullPathToSaveRes)
+        {
+            Task[] tasks = new Task[DataSetsPerTask.Count];
+            int i = 0;
+
+            foreach (var DataSets in DataSetsPerTask)
+            {
+                var paramForTask = (FullPathToSaveRes, DataSets);
+
+                tasks[i++] = new Task(Stat.CollectStat, paramForTask);
+            }
+
+            return tasks;
+        }
+
+        private static int Main(string[] args)
+        {
+            if (args.Length != 1)
+            {
+                Log.Info("\n\tMust be a single argument.\n\tPath to directories which contains data.");
+                return 1;
+            }
+
+            string pathToDir = args[0];
+
+            if (!Directory.Exists(pathToDir))
+            {
+                Log.Info($"\n\t{pathToDir} does not exist.");
+                return 1;
+            }
+
+            string resDir = Path.Combine(pathToDir, "Stat");
+
+            if (!Directory.Exists(resDir))
+            {
+                Directory.CreateDirectory(resDir);
+            }
+
+            Log.Info($"Start processing batch...");
+
+            foreach (DataBatch batch in CreateBatches(pathToDir))
+            {
+                if (batch.TotalBytesBatchSize > MAX_BYTES_PER_BATCH)
+                {
+                    Log.Info("Skipped:");
+
+                    foreach (var item in batch.Dirs)
+                    {
+                        Log.Info($"\t{item.DirectoryName}");
+                    }
+                }
+                else
+                {
+                    Log.Info("\nA new batch:");
+                    Log.Info($"\tCount of directories {batch.Dirs.Count}.");
+                    Log.Info($"\tSize in MB {batch.TotalBytesBatchSize / (1024 * 1024F)}.");
+
+                    IReadOnlyList<DataForTask> dataPerTask = SplitBatch(batch);
+
+                    IReadOnlyCollection<IEnumerable<DataSet>> dataSetsPerTask = GetDataSets(dataPerTask);
+
+                    Task[] tasks = GetTasks(dataSetsPerTask, resDir);
+
+                    Log.Info("Tasks are running.");
+
+                    for (int i = 0; i < tasks.Length; i++)
+                    {
+                        tasks[i].Start();
+                    }
+
+                    Task.WaitAll(tasks);
+                }
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// Разделение. 
+        /// </summary>
+        /// <param name="Batch"></param>
+        /// <returns></returns>
+        private static IReadOnlyList<DataForTask> SplitBatch(DataBatch Batch)
         {
             int cpuCount = Environment.ProcessorCount;
 
-            List<List<FilesWithData>> dataPerThread = new List<List<FilesWithData>>(cpuCount);
+            List<DataForTask> dataPerThread = new List<DataForTask>(cpuCount);
 
-            if(Batch.Dirs.Count <= cpuCount)
+            if (Batch.Dirs.Count <= cpuCount)
             {
                 foreach (FilesWithData data in Batch.Dirs)
                 {
-                    dataPerThread.Add(new List<FilesWithData>(1) { data });
+                    DataForTask dataForTask = new DataForTask();
+                    dataForTask.Add(data);
+                    dataPerThread.Add(dataForTask);
                 }
             }
             else
@@ -154,14 +291,14 @@
 
                 for (int i = 0; i < cpuCount; i++)
                 {
-                    dataPerThread.Add(new List<FilesWithData>());
+                    dataPerThread.Add(new DataForTask());
                 }
 
                 int j = 0;
 
                 foreach (FilesWithData data in allDirs)
                 {
-                    if(j < cpuCount)
+                    if (j < cpuCount)
                     {
                         dataPerThread[j].Add(data);
                         j++;
@@ -169,13 +306,13 @@
                     else
                     {
                         int minIndex = 0;
-                        long minTotalSize = checked(dataPerThread[minIndex].Sum(a => a.TotalBytesFilesSize));
+                        long minTotalSize = checked(dataPerThread[minIndex].FilesGroups.Sum(a => a.TotalBytesFilesSize));
 
                         for (int k = 1; k < cpuCount; k++)
                         {
-                            long totalSize = checked(dataPerThread[k].Sum(a => a.TotalBytesFilesSize));
+                            long totalSize = checked(dataPerThread[k].FilesGroups.Sum(a => a.TotalBytesFilesSize));
 
-                            if(totalSize < minTotalSize)
+                            if (totalSize < minTotalSize)
                             {
                                 minTotalSize = totalSize;
                                 minIndex = k;
@@ -189,87 +326,5 @@
 
             return dataPerThread;
         }
-
-        private static int Main(string[] args)
-        {
-            if(args.Length != 1)
-            {
-                Console.WriteLine("\n\tMust be a single argument.");
-                return 1;
-            }
-
-            string pathToDir = args[0];
-
-   
-            if(!Directory.Exists(pathToDir))
-            {
-                Console.WriteLine($"\n\t{pathToDir} does not exist.");
-                return 1;
-            }
-
-            if(!Directory.Exists(Path.Combine(pathToDir, "Stat")))
-            {
-                Directory.CreateDirectory(Path.Combine(pathToDir, "Stat"));
-            }
-
-            Console.WriteLine($"Start processing batch...");
-
-            foreach (DataBatch batch in CreateBatches(pathToDir))
-            { 
-                if(batch.TotalBytesBatchSize > MAX_BYTES_PER_BATCH)
-                {
-                    Console.WriteLine("Skipped:");
-
-                    foreach (var item in batch.Dirs)
-                    {
-                        Console.WriteLine($"\t{item.DirectoryName}");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("\nA new batch.");
-                    Console.WriteLine($"\tCount of directories {batch.Dirs.Count}.");
-                    Console.WriteLine($"\tSize in MB {batch.TotalBytesBatchSize / (1024 * 1024F)}.");
-
-                    var dataPerTask = SplitBatch(batch);
-
-                    List<List<DataSet>> dataSetsPerTask = new List<List<DataSet>>(dataPerTask.Count);
-
-                    for (int i = 0; i < dataPerTask.Count; i++)
-                    {
-                        dataSetsPerTask.Add(new List<DataSet>(dataPerTask[i].Count));
-                    }
-
-                    for (int j = 0; j < dataPerTask.Count; j++)
-                    {
-                        for (int k = 0; k < dataPerTask[j].Count; k++)
-                        {
-                            FilesWithData files = dataPerTask[j][k];
-
-                            Console.WriteLine($"Filling tables from {files.DirectoryName}");
-
-                            DataSet set = SETables.CreateDataSet(files.DirectoryName);
-
-                            Console.WriteLine("Filling:");
-
-                            foreach (string path in files.FilesFullPaths)
-                            {
-                                string tableName = Path.GetFileNameWithoutExtension(path);
-                                Console.WriteLine($"\t{tableName}");
-                                Filler filler = Filler.GetFillerByTableName(tableName);
-                                DataTable table = set.Tables[tableName];
-                                filler.FillFromXml(path, table);
-                            }
-
-                            dataSetsPerTask[j].Add(set);
-                        }
-                    }
-                }
-            }
-
-            Console.ReadKey();
-
-            return 0;
-        }   
     }
 }
