@@ -38,6 +38,7 @@
             else if (Name.Equals("Tags", StringComparison.OrdinalIgnoreCase))
             {
                 var allMatches = Regex.Matches(Value, "<(.+?)>");
+
                 int countLessChar = 0;
 
                 for (int i = 0; i < Value.Length; i++)
@@ -47,6 +48,7 @@
                         countLessChar++;
                     }
                 }
+
 
                 StringBuilder tags = new StringBuilder(Value.Length - countLessChar);
 
@@ -63,8 +65,17 @@
                     }
                 }
 
-                // Исключается знак ';' в конце, потому что он не нужен.
-                return tags.ToString(0, tags.Length - 1);
+
+                if(tags.Length > 1)
+                {
+                    // Исключается знак ';' в конце, потому что он не нужен.
+                    return tags.ToString(0, tags.Length - 1);
+                }
+                else
+                {
+                    return "";
+                }
+                
             }
             else
             {
