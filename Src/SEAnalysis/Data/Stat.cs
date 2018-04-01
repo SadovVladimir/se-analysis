@@ -6,6 +6,7 @@
     using System.IO;
     using System.Linq;
     using System.Text;
+    using System.Threading.Tasks;
 
     using CsvHelper;
     using CsvHelper.Configuration;
@@ -98,8 +99,8 @@
                         .OrderByDescending(group => group.Key)
                         .Take(N)
                         .SelectMany(group => group.Select(row =>
-                        { 
-                            short ? age = row.Field<short?>(GlobalDef.AttrToColumnNameDict["Age"]);
+                        {
+                            short? age = row.Field<short?>(GlobalDef.AttrToColumnNameDict["Age"]);
                             return new
                             {
                                 Reputation = group.Key,
@@ -113,7 +114,6 @@
 
             return users;
         }
-
 
         private static IEnumerable<object> GetNMostViewsQuestion(DataSet DataSet, int N)
         {
@@ -157,6 +157,22 @@
             return mostViewsQuestions.Take(N);
         }
 
+        private static IEnumerable<object> GetQuestionsWithTags(DataSet DataSet)
+        {
+            DataTable questionTabe = DataSet.Tables["Posts"];
+
+            var questionsWithTags = from row in questionTabe.AsEnumerable()
+                                    where row.Field<PostType>(GlobalDef.AttrToColumnNameDict["PostTypeId"]) == PostType.Question
+                                    select new
+                                    {
+                                        Tags = row.Field<string>(GlobalDef.AttrToColumnNameDict["Tags"]),
+                                        Date = row.Field<DateTime>(GlobalDef.AttrToColumnNameDict["CreationDate"]).ToShortDateString()
+                                    };
+
+            return questionsWithTags;
+
+        }
+
         private static void SaveToCSV(string PathToSave, IEnumerable<object> Collection)
         {
             using (CsvWriter writer = new CsvWriter(new StreamWriter(PathToSave, false, Encoding.UTF8)))
@@ -165,46 +181,41 @@
             }
         }
 
-        public static void CollectStat(object Param)
+        public static void CollectStat(DataSet Data, string SaveDir)
         {
-            (string pathToSave, IEnumerable<DataSet> dataSets) = (ValueTuple<string, IEnumerable<DataSet>>)Param;
+            string saveDir = Path.Combine(SaveDir, Data.DataSetName);
 
-            foreach (DataSet dataSet in dataSets)
+            if (!Directory.Exists(saveDir))
             {
-                string saveDir = Path.Combine(pathToSave, dataSet.DataSetName);
-
-                if (!Directory.Exists(saveDir))
-                {
-                    Directory.CreateDirectory(saveDir);
-                }
-
-                var ages = GetAges(dataSet).ToArray();
-
-                var popTags = GetNPopTags(dataSet, 20).ToArray();
-
-                var unpopTags = GetNUnpopTags(dataSet, 20).ToArray();
-
-                var users = GetNUsersHaveHighestRep(dataSet, 20).ToArray();
-
-                var usersReg = GetCountUsersRegByYearsAndMonths(dataSet).ToArray();
-
-                var posts = GetCountCrDateQuestionPostsByYearsAndMonths(dataSet).ToArray();
-
-                var mostViewQuestions = GetNMostViewsQuestion(dataSet, 30);
-
-                var questionsHighestScore = GetNQuestionsByScore(dataSet, 30);
-
-                SaveToCSV(Path.Combine(saveDir, "Ages.csv"), ages);
-                SaveToCSV(Path.Combine(saveDir, "PopTags.csv"), popTags);
-                SaveToCSV(Path.Combine(saveDir, "UnpopTags.csv"), unpopTags);
-                SaveToCSV(Path.Combine(saveDir, "UsersHighestRep.csv"), users);
-                SaveToCSV(Path.Combine(saveDir, "UsersReg.csv"), usersReg);
-                SaveToCSV(Path.Combine(saveDir, "PostsCrDate.csv"), posts);
-                SaveToCSV(Path.Combine(saveDir, "MostViewQuestions.csv"), mostViewQuestions);
-                SaveToCSV(Path.Combine(saveDir, "QuestionsHighestScore.csv"), questionsHighestScore);
+                Directory.CreateDirectory(saveDir);
             }
+
+            var ages = GetAges(Data);
+
+            var popTags = GetNPopTags(Data, 30);
+
+            var unpopTags = GetNUnpopTags(Data, 30);
+
+            var users = GetNUsersHaveHighestRep(Data, 20);
+
+            var usersReg = GetCountUsersRegByYearsAndMonths(Data);
+
+            var posts = GetCountCrDateQuestionPostsByYearsAndMonths(Data);
+
+            var mostViewQuestions = GetNMostViewsQuestion(Data, 50);
+
+            var questionsHighestScore = GetNQuestionsByScore(Data, 50);
+            var questionWithTags = GetQuestionsWithTags(Data);
+
+            SaveToCSV(Path.Combine(saveDir, "Ages.csv"), ages);
+            SaveToCSV(Path.Combine(saveDir, "PopTags.csv"), popTags);
+            SaveToCSV(Path.Combine(saveDir, "UnpopTags.csv"), unpopTags);
+            SaveToCSV(Path.Combine(saveDir, "UsersHighestRep.csv"), users);
+            SaveToCSV(Path.Combine(saveDir, "UsersReg.csv"), usersReg);
+            SaveToCSV(Path.Combine(saveDir, "PostsCrDate.csv"), posts);
+            SaveToCSV(Path.Combine(saveDir, "MostViewQuestions.csv"), mostViewQuestions);
+            SaveToCSV(Path.Combine(saveDir, "QuestionsHighestScore.csv"), questionsHighestScore);
+            SaveToCSV(Path.Combine(saveDir, "QuestionsWithTags.csv"), questionWithTags);
         }
     }
-
-   
 }
