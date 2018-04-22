@@ -7,5 +7,5 @@ charset = utf-8
 [*.md]
 charset = utf-8
 
-[*.ch]
+[*.cs]
 charset = utf-8
