@@ -1,4 +1,4 @@
-﻿namespace SEA
+namespace SEA
 {
     using System;
     using System.Collections.Generic;
@@ -11,12 +11,22 @@
 
     using NLog;
 
+    using CommandLine;
+
+
+
+    class Options
+    {
+        [Option('i', "input", HelpText = "A directory which contains all directories of sections Stack Exchange.", Required = true)]
+        public string InputDir { get; set; }
+
+        [Option('s', "size", HelpText = "A maximum size of all files for loading to RAM (in bytes) in the directory. If files have a size is greater than maximum then it is skipped.", Default = 3 * 1024 * 1024L * 1024)]
+        public long MaxFilesSize { get; set; }
+    }
+
 
     internal class Program
     {
-        // Максимальный суммарный размер файлов для одного раздела Stack Exchange.
-        private const long MAX_FILES_SIZE_IN_BYTES = checked((3 * 1024 + 600) * 1024L * 1024);
-
         private static readonly string[] _acceptedNames =
         {
             "Posts",
@@ -47,27 +57,58 @@
             return set;
         }
 
-        private static int Main(string[] args)
+        private static int Run(Options Options)
         {
-            if (args.Length != 1)
-            {
-                _log.Info("\n\tMust be a single argument (path to directories which contains data).");
-                return 1;
-            }
+            string pathToDir = Options.InputDir;
 
-            string pathToDir = args[0];
+            long maxFilesSizeInBytes = Options.MaxFilesSize;
 
             if (!Directory.Exists(pathToDir))
             {
-                _log.Info($"\n\t{pathToDir} does not exist.");
+                _log.Info($"\n\tThe directory '{pathToDir}' does not exist.");
                 return 1;
             }
 
             string resDir = "Stat";
 
-            if (Directory.Exists(resDir))
+            if(Directory.Exists(resDir))
             {
-                Directory.Delete(resDir, true);
+                string[] subEntryies = Directory.GetFileSystemEntries(resDir);
+
+                char answer = 'n';
+
+                if (subEntryies.Length != 0)
+                {
+                    _log.Info($"The directory '.\\{resDir}' is not empty. Need to clear '{resDir}'.\nDo you want to delete all subdirectories and files?");
+
+                    do
+                    {
+                        _log.Info("\nEnter 'Y/y' or 'N/n'.");
+
+                        answer = Console.ReadKey().KeyChar;
+
+                        answer = char.ToLowerInvariant(answer);
+
+                    } while (answer != 'y' && answer != 'n');
+
+                    _log.Info("\n");
+
+                    if (answer == 'n')
+                    {
+                        _log.Info($"The program need to clear '{resDir}' for further work. Save all files from '{resDir}' and rerun program.");
+                        return 0;
+                    }
+                    else if (answer == 'y')
+                    {
+                        Directory.Delete(resDir, true);
+                    }
+                }
+                else
+                {
+                    Directory.Delete(resDir);
+                }
+
+               
             }
 
             Directory.CreateDirectory(resDir);
@@ -78,7 +119,7 @@
 
             foreach (DirectoryInfo datasetDir in datasetsDir.GetDirectories())
             {
-                _log.Info($"Filling tables from {datasetDir.Name}.");
+                _log.Info($"Filling tables from '{datasetDir.Name}'.");
 
                 long totalSize = 0;
 
@@ -88,7 +129,7 @@
                     {
                         totalSize += file.Length;
 
-                        if (totalSize > MAX_FILES_SIZE_IN_BYTES)
+                        if (totalSize > maxFilesSizeInBytes)
                         {
                             _log.Info("\tExceeded maximum size of files.\n\tThe directory skipped.");
                             files.Clear();
@@ -98,7 +139,7 @@
                         {
                             files.AddLast(file);
                         }
-                    }                   
+                    }
                 }
 
                 if (files.Count != 0)
@@ -109,7 +150,16 @@
                 }
             }
 
+            _log.Info($"\nAll files are saved in '.\\{resDir}'.");
+
             return 0;
+        }
+
+        private static int Main(string[] args)
+        {
+            ParserResult<Options> result = Parser.Default.ParseArguments<Options>(args);
+
+            return result.MapResult(options => Run(options), _ => 1);
         }
     }
 }
