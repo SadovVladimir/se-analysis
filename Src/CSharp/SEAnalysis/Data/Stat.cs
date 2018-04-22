@@ -1,4 +1,4 @@
-﻿namespace SEA.Data
+namespace SEA.Data
 {
     using System;
     using System.Collections.Generic;
@@ -157,22 +157,6 @@
             return mostViewsQuestions.Take(N);
         }
 
-        private static IEnumerable<object> GetQuestionsWithTags(DataSet DataSet)
-        {
-            DataTable questionTabe = DataSet.Tables["Posts"];
-
-            var questionsWithTags = from row in questionTabe.AsEnumerable()
-                                    where row.Field<PostType>(GlobalDef.AttrToColumnNameDict["PostTypeId"]) == PostType.Question
-                                    select new
-                                    {
-                                        Tags = row.Field<string>(GlobalDef.AttrToColumnNameDict["Tags"]),
-                                        Date = row.Field<DateTime>(GlobalDef.AttrToColumnNameDict["CreationDate"]).ToShortDateString()
-                                    };
-
-            return questionsWithTags;
-
-        }
-
         private static void SaveToCSV(string PathToSave, IEnumerable<object> Collection)
         {
             using (CsvWriter writer = new CsvWriter(new StreamWriter(PathToSave, false, Encoding.UTF8)))
@@ -205,7 +189,6 @@
             var mostViewQuestions = GetNMostViewsQuestion(Data, 50);
 
             var questionsHighestScore = GetNQuestionsByScore(Data, 50);
-            var questionWithTags = GetQuestionsWithTags(Data);
 
             SaveToCSV(Path.Combine(saveDir, "Ages.csv"), ages);
             SaveToCSV(Path.Combine(saveDir, "PopTags.csv"), popTags);
@@ -215,7 +198,6 @@
             SaveToCSV(Path.Combine(saveDir, "PostsCrDate.csv"), posts);
             SaveToCSV(Path.Combine(saveDir, "MostViewQuestions.csv"), mostViewQuestions);
             SaveToCSV(Path.Combine(saveDir, "QuestionsHighestScore.csv"), questionsHighestScore);
-            SaveToCSV(Path.Combine(saveDir, "QuestionsWithTags.csv"), questionWithTags);
         }
     }
 }
