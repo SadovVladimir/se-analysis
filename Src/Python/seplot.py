@@ -8,12 +8,15 @@ import time
 import datetime
 import argparse
 import shutil
+import warnings
 
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import pandas
 import numpy
+
+warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
 
 NamedData = namedtuple("NamedData", ["se_section", "name", "data"])
 
