@@ -5,12 +5,18 @@ from collections import namedtuple, Counter
 import locale
 from multiprocessing import Pool
 import time
+import datetime
+import argparse
+import shutil
+import warnings
 
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import pandas
 import numpy
+
+warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
 
 NamedData = namedtuple("NamedData", ["se_section", "name", "data"])
 
@@ -53,8 +59,6 @@ def plot(named_data: NamedData):
         figure = plot_time_ser(named_data, "Регистрации новых пользователей")
     elif name == "PostsCrDate":
         figure = plot_time_ser(named_data, "Новые вопросы")
-    elif name == "QuestionsWithTags":
-        figure = plot_pop_tags_by_time(named_data)
     return figure
 
 
@@ -143,8 +147,6 @@ def load_dataset(path_to_file):
     elif name_without_ext == "UsersReg" or name_without_ext == "PostsCrDate":
         data = pandas.read_csv(path_to_file, parse_dates={"Date": [0, 1]})
         data.sort_values("Date", inplace=True)
-    elif name_without_ext == "QuestionsWithTags":
-        data = pandas.read_csv(path_to_file, dtype={"Tags": str}, parse_dates=[1], keep_default_na=False)
     if data is not None:
         print("\tLoaded: {}.".format(base_name))
     return None if data is None else NamedData(se_section, name_without_ext, data)
@@ -162,26 +164,47 @@ def plot_and_save_figure(paths_and_file):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Must be a single parameter.")
+    args_parser = argparse.ArgumentParser(description="Visualize data from work result of C# program.")
+    args_parser.add_argument("-p", "--parallel", action="store_true", help="Running the program in parallel mode.")
+    args_parser.add_argument("input_dir", help="A path to a directory which contains csv files."
+                                               " Files are the result of work C# program.")
+
+    cli_args = args_parser.parse_args()
+
+    if not os.path.isdir(cli_args.input_dir):
+        print("\n\t'{}' does not exist.".format(cli_args.input_dir))
         sys.exit(2)
-
-    path = sys.argv[1]
-
-    if not os.path.isdir(path):
-        print("{} does not exist.".format(path))
-        sys.exit(2)
-
-    is_parallel_map = True
 
     new_dir_img = os.path.join(".", "Images")
-    
-    if not os.path.exists(new_dir_img):
+
+    if os.path.exists(new_dir_img):
+        is_empty_dir = False
+        with os.scandir(new_dir_img) as image_dir_it:
+            if next(image_dir_it, None) is None:
+                is_empty_dir = True
+        if not is_empty_dir:
+            print("The directory '{0}' is not empty. Need to clear the directory."
+                  " Do you want to delete it?".format(new_dir_img))
+            answer = 'n'
+            while True:
+                print("Enter 'Y/y' or 'N/n'.")
+                answer = input().rstrip().lower()
+                if answer == 'y' or answer == 'n':
+                    break
+
+            if answer == 'n':
+                print("The program need to clear '{0}' for further work. "
+                      "Save all files from '{0}' and rerun program.".format(new_dir_img))
+                sys.exit(0)
+            elif answer == 'y':
+                shutil.rmtree(new_dir_img)
+                os.mkdir(new_dir_img)
+    else:
         os.mkdir(new_dir_img)
 
     paths_and_datasets = []
 
-    with os.scandir(path) as dirit:
+    with os.scandir(cli_args.input_dir) as dirit:
         for direct in dirit:
             if direct.is_dir():
                 if direct.name != "Images":
@@ -198,15 +221,15 @@ if __name__ == "__main__":
                                         paths_and_datasets.append((img_res_dir, data))
 
     print("The loading completed.")
-    print("Plotting...")
+    print("Drawing...")
     start_time = time.perf_counter()
-    if is_parallel_map:
-        with Pool(2) as pool:
+    if cli_args.parallel:
+        with Pool() as pool:
             pool.map(plot_and_save_figure, paths_and_datasets)
     else:
         for val in paths_and_datasets:
             plot_and_save_figure(val)
     end_time = time.perf_counter()
 
-    print("Elapsed time: {} S".format(end_time - start_time))
+    print("Elapsed time: {0} S.".format(end_time - start_time))
 
