@@ -12,16 +12,26 @@ namespace SEA
     using NLog;
 
     using CommandLine;
+    using CommandLine.Text;
 
 
 
     class Options
     {
-        [Option('i', "input", HelpText = "A directory which contains all directories of sections Stack Exchange.", Required = true)]
+        private static readonly Example[] _examples = new Example[2]
+        {
+            new Example("Example", new UnParserSettings() { UseEqualToken = true }, new Options { InputDir = "Path_to_input_dir"}),
+            new Example("Constrain size of files", new Options {InputDir = "Path_to_input_dir", MaxFilesSize = 209715200 })
+        };
+
+        [Value(0, MetaName = "Input dir.", HelpText = "A path to a directory which contains all directories of sections Stack Exchange.", Required = true)]
         public string InputDir { get; set; }
 
         [Option('s', "size", HelpText = "A maximum size of all files for loading to RAM (in bytes) in the directory. If files have a size is greater than maximum then it is skipped.", Default = 3 * 1024 * 1024L * 1024)]
         public long MaxFilesSize { get; set; }
+
+        [Usage]
+        public static IEnumerable<Example> Examples => _examples;
     }
 
 
@@ -79,7 +89,7 @@ namespace SEA
 
                 if (subEntryies.Length != 0)
                 {
-                    _log.Info($"The directory '.\\{resDir}' is not empty. Need to clear '{resDir}'.\nDo you want to delete all subdirectories and files?");
+                    _log.Info($"The directory '{Path.Combine(".", resDir)}' is not empty. Need to clear '{resDir}'.\nDo you want to delete all subdirectories and files?");
 
                     do
                     {
@@ -150,7 +160,7 @@ namespace SEA
                 }
             }
 
-            _log.Info($"\nAll files are saved in '.\\{resDir}'.");
+            _log.Info($"\nAll files are saved in '{Path.Combine(".", resDir)}'.");
 
             return 0;
         }
