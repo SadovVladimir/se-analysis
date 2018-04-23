@@ -83,11 +83,11 @@ namespace SEA
 
             if(Directory.Exists(resDir))
             {
-                string[] subEntryies = Directory.GetFileSystemEntries(resDir);
+                bool isEmptyDir = Directory.EnumerateFileSystemEntries(resDir).Any();
 
                 char answer = 'n';
 
-                if (subEntryies.Length != 0)
+                if (isEmptyDir)
                 {
                     _log.Info($"The directory '{Path.Combine(".", resDir)}' is not empty. Need to clear '{resDir}'.\nDo you want to delete all subdirectories and files?");
 
@@ -111,29 +111,26 @@ namespace SEA
                     else if (answer == 'y')
                     {
                         Directory.Delete(resDir, true);
+                        Directory.CreateDirectory(resDir);
                     }
-                }
-                else
-                {
-                    Directory.Delete(resDir);
-                }
-
-               
+                }          
             }
-
-            Directory.CreateDirectory(resDir);
+            else
+            {
+                Directory.CreateDirectory(resDir);
+            }
 
             DirectoryInfo datasetsDir = new DirectoryInfo(pathToDir);
 
             LinkedList<FileInfo> files = new LinkedList<FileInfo>();
 
-            foreach (DirectoryInfo datasetDir in datasetsDir.GetDirectories())
+            foreach (DirectoryInfo datasetDir in datasetsDir.EnumerateDirectories())
             {
                 _log.Info($"Filling tables from '{datasetDir.Name}'.");
 
                 long totalSize = 0;
 
-                foreach (FileInfo file in datasetDir.GetFiles("*.xml"))
+                foreach (FileInfo file in datasetDir.EnumerateFiles("*.xml"))
                 {
                     if (_acceptedNames.Contains(Path.GetFileNameWithoutExtension(file.Name)))
                     {
