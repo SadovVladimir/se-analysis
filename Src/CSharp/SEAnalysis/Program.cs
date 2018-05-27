@@ -21,13 +21,13 @@ namespace SEA
         private static readonly Example[] _examples = new Example[2]
         {
             new Example("Example", new UnParserSettings() { UseEqualToken = true }, new Options { InputDir = "Path_to_input_dir"}),
-            new Example("Constrain size of files", new Options {InputDir = "Path_to_input_dir", MaxFilesSize = 209715200 })
+            new Example("Constrain size of files", new Options { InputDir = "Path_to_input_dir", MaxFilesSize = 512 })
         };
 
         [Value(0, MetaName = "Input dir.", HelpText = "A path to a directory which contains all directories of sections Stack Exchange.", Required = true)]
         public string InputDir { get; set; }
 
-        [Option('s', "size", HelpText = "A maximum size of all files for loading to RAM (in bytes) in the directory. If files have a size is greater than maximum then it is skipped.", Default = 3 * 1024 * 1024L * 1024)]
+        [Option('s', "size", HelpText = "A maximum size of all files for loading to RAM (in megabytes) in the directory. If files have a size is greater than maximum then it is skipped.", Default = 1024)]
         public long MaxFilesSize { get; set; }
 
         [Usage]
@@ -69,9 +69,14 @@ namespace SEA
 
         private static int Run(Options Options)
         {
+            long ConvertMBToBytes(long Megabytes)
+            {
+                return Megabytes * 1024 * 1024;
+            }
+
             string pathToDir = Options.InputDir;
 
-            long maxFilesSizeInBytes = Options.MaxFilesSize;
+            long maxFilesSizeInBytes = ConvertMBToBytes(Options.MaxFilesSize);
 
             if (!Directory.Exists(pathToDir))
             {
