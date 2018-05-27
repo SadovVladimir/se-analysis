@@ -23,7 +23,7 @@
   * Версия Python 3.5 или выше.
   * Установленные пакеты [matplotlib](https://matplotlib.org/), [pandas](http://pandas.pydata.org/), [numpy](http://www.numpy.org/).
 
-## Принцип работы
+## Как запускать
 
 1. [Предварительная обработка файлов на C#](/Src/CSharp/README.md).
 2. [Построение графиков на Python](/Src/Python/README.md).
